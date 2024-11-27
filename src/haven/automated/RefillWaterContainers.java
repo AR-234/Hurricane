@@ -3,6 +3,8 @@ package haven.automated;
 import haven.*;
 import haven.resutil.WaterTile;
 
+import static java.lang.Math.subtractExact;
+
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -15,7 +17,6 @@ public class RefillWaterContainers implements Runnable {
     private final Map<String, Float> WATER_CONTAINERS = Map.ofEntries(
         // Generic
         Map.entry("gfx/invobjs/waterflask",      2.0F),
-        // Inventory
         Map.entry("gfx/invobjs/waterskin",       3.0F),
         Map.entry("gfx/invobjs/glassjug",        5.0F),
         // Belt
@@ -31,31 +32,31 @@ public class RefillWaterContainers implements Runnable {
     @Override
     public void run() {
         try {
-            do {
-                MCache mcache = gui.ui.sess.glob.map;
-                int t = mcache.gettile(gui.map.player().rc.floor(MCache.tilesz));
-                Tiler tl = mcache.tiler(t);
-                if (tl instanceof WaterTile) {
-                    Resource res = mcache.tilesetr(t);
-                    if (res != null) {
-                        if (res.name.equals("gfx/tiles/water") || res.name.equals("gfx/tiles/deep")) {
-                            Inventory playerInventory = gui.maininv;
-                            refillInventoryWaterContainers(playerInventory);
-                            refillInventoryWaterContainers(returnBelt());
-                        } else if (res.name.equals("gfx/tiles/owater") || res.name.equals("gfx/tiles/odeep") || res.name.equals("gfx/tiles/odeeper")){
-                            gui.ui.error("Refill Water Script: This is salt water, you can't drink this!");
-                            return;
-                        }
-                    } else {
-                        gui.ui.error("Refill Water Script: Error checking tile, try again!");
+            MCache mcache = gui.ui.sess.glob.map;
+            int t = mcache.gettile(gui.map.player().rc.floor(MCache.tilesz));
+            Tiler tl = mcache.tiler(t);
+            if (tl instanceof WaterTile) {
+                Resource res = mcache.tilesetr(t);
+                if (res != null) {
+                    if (res.name.equals("gfx/tiles/water") || res.name.equals("gfx/tiles/deep")) {
+                        Inventory playerInventory = gui.maininv;
+                        Coord2d playerLocation = gui.map.player().rc;
+                        refillEquipmentWaterContainers(playerLocation);
+                        refillInventoryWaterContainers(playerInventory, playerLocation);
+                        refillInventoryWaterContainers(returnBelt(), playerLocation);
+                    } else if (res.name.equals("gfx/tiles/owater") || res.name.equals("gfx/tiles/odeep") || res.name.equals("gfx/tiles/odeeper")){
+                        gui.ui.error("Refill Water Script: This is salt water, you can't drink this!");
                         return;
                     }
                 } else {
-                    gui.ui.error("Refill Water Script: You must be on a water tile, in order to refill your containers!");
+                    gui.ui.error("Refill Water Script: Error checking tile, try again!");
                     return;
                 }
-            } while (getInventoryContainers(gui.maininv).size() != 0 || getInventoryContainers(returnBelt()).size() != 0);
-            gui.ui.msg("Water Refilled!");
+            } else {
+                gui.ui.error("Refill Water Script: You must be on a water tile, in order to refill your containers!");
+                return;
+            }
+            //gui.ui.msg("Water Refilled!");
         } catch (Exception e) {
 //            gui.ui.error("Refill Water Containers Script: An Unknown Error has occured.");
         }
@@ -95,20 +96,50 @@ public class RefillWaterContainers implements Runnable {
         }
         return containers;
     }
-    private void refillInventoryWaterContainers(Inventory inventory){
-        Map<WItem, Coord> inventoryItems = getInventoryContainers(inventory);
-        for (Map.Entry<WItem, Coord> item : inventoryItems.entrySet()) {
+
+
+    private void refillEquipmentWaterContainers(Coord2d location) {
+        Equipory eq = gui.getequipory();
+        WItem[] slots = eq.slots;
+        for (int slotIndex=0; slotIndex < slots.length; slotIndex++) {
             try {
-                item.getKey().item.wdgmsg("take", Coord.z);
-                Thread.sleep(5);
-                gui.map.wdgmsg("itemact", Coord.z, gui.map.player().rc.floor(posres), 0);
-                Thread.sleep(30);
-                inventory.wdgmsg("drop", item.getValue());
-                Thread.sleep(5);
-            } catch (InterruptedException ignored) {
-                return;
+                WItem wi = slots[slotIndex];
+                String resName = wi.item.res.get().name;
+                ItemInfo.Contents.Content content = getContent(wi.item);
+                if (WATER_CONTAINERS.containsKey(resName) && shouldAddToContainers(content, WATER_CONTAINERS.get(resName))) {
+                    try{
+                        wi.item.wdgmsg("take", Coord.z);
+                        Thread.sleep(5);
+                        gui.map.wdgmsg("itemact", Coord.z, location.floor(posres), 0);
+                        Thread.sleep(30);
+                        eq.wdgmsg("drop", slotIndex);
+                        Thread.sleep(5);
+                    } catch (InterruptedException ignored) {
+                        return;
+                    }
+                }
+            } catch (NullPointerException ex) {
+                //System.out.println("nothing equipped in this slot");
             }
         }
+    }
+
+    private void refillInventoryWaterContainers(Inventory inventory, Coord2d location){
+        Map<WItem, Coord> inventoryItems = getInventoryContainers(inventory);
+        do{
+            for (Map.Entry<WItem, Coord> item : inventoryItems.entrySet()) {
+                try{
+                    item.getKey().item.wdgmsg("take", Coord.z);
+                    Thread.sleep(5);
+                    gui.map.wdgmsg("itemact", Coord.z, location.floor(posres), 0);
+                    Thread.sleep(30);
+                    inventory.wdgmsg("drop", item.getValue());
+                    Thread.sleep(5);
+                } catch (InterruptedException ignored) {
+                    return;
+                }
+            }
+        } while ((inventoryItems = getInventoryContainers(inventory)).size() != 0);
     }
     private ItemInfo.Contents.Content getContent(GItem item) {
         ItemInfo.Contents.Content content = null;
