@@ -11,6 +11,19 @@ public class RefillWaterContainers implements Runnable {
     private static final Coord2d posres = Coord2d.of(0x1.0p-10, 0x1.0p-10).mul(11, 11);
     private GameUI gui;
 
+    // To support additional water containers add them here
+    private final Map<String, Float> WATER_CONTAINERS = Map.ofEntries(
+        // Generic
+        Map.entry("gfx/invobjs/waterflask",      2.0F),
+        // Inventory
+        Map.entry("gfx/invobjs/waterskin",       3.0F),
+        Map.entry("gfx/invobjs/glassjug",        5.0F),
+        // Belt
+        Map.entry("gfx/invobjs/small/waterskin", 3.0F),
+        Map.entry("gfx/invobjs/small/glassjug",  5.0F)
+
+    );
+
     public RefillWaterContainers(GameUI gui) {
         this.gui = gui;
     }
@@ -26,33 +39,9 @@ public class RefillWaterContainers implements Runnable {
                     Resource res = mcache.tilesetr(t);
                     if (res != null) {
                         if (res.name.equals("gfx/tiles/water") || res.name.equals("gfx/tiles/deep")) {
-                            Inventory belt = returnBelt();
-                            Map<WItem, Coord> inventoryItems = getInventoryContainers();
-                            for (Map.Entry<WItem, Coord> item : inventoryItems.entrySet()) {
-                                try {
-                                    item.getKey().item.wdgmsg("take", Coord.z);
-                                    Thread.sleep(5);
-                                    gui.map.wdgmsg("itemact", Coord.z, gui.map.player().rc.floor(posres), 0);
-                                    Thread.sleep(30);
-                                    gui.maininv.wdgmsg("drop", item.getValue());
-                                    Thread.sleep(5);
-                                } catch (InterruptedException ignored) {
-                                    return;
-                                }
-                            }
-                            Map<WItem, Coord> beltItems = getBeltContainers();
-                            for (Map.Entry<WItem, Coord> item : beltItems.entrySet()) {
-                                try {
-                                    item.getKey().item.wdgmsg("take", Coord.z);
-                                    Thread.sleep(5);
-                                    gui.map.wdgmsg("itemact", Coord.z, gui.map.player().rc.floor(posres), 0);
-                                    Thread.sleep(40);
-                                    belt.wdgmsg("drop", item.getValue());
-                                    Thread.sleep(5);
-                                } catch (InterruptedException ignored) {
-                                    return;
-                                }
-                            }
+                            Inventory playerInventory = gui.maininv;
+                            refillInventoryWaterContainers(playerInventory);
+                            refillInventoryWaterContainers(returnBelt());
                         } else if (res.name.equals("gfx/tiles/owater") || res.name.equals("gfx/tiles/odeep") || res.name.equals("gfx/tiles/odeeper")){
                             gui.ui.error("Refill Water Script: This is salt water, you can't drink this!");
                             return;
@@ -65,47 +54,14 @@ public class RefillWaterContainers implements Runnable {
                     gui.ui.error("Refill Water Script: You must be on a water tile, in order to refill your containers!");
                     return;
                 }
-            } while (getInventoryContainers().size() != 0 || getBeltContainers().size() != 0);
+            } while (getInventoryContainers(gui.maininv).size() != 0 || getInventoryContainers(returnBelt()).size() != 0);
             gui.ui.msg("Water Refilled!");
         } catch (Exception e) {
 //            gui.ui.error("Refill Water Containers Script: An Unknown Error has occured.");
         }
     }
 
-
-    public Map<WItem, Coord> getBeltContainers() {
-        Map<WItem, Coord> containers = new HashMap<>();
-        Coord sqsz = Inventory.sqsz;
-        for (Widget w = gui.lchild; w != null; w = w.prev) {
-            if (!(w instanceof GItem.ContentsWindow) || !((GItem.ContentsWindow) w).myOwnEquipory) continue;
-            for (Widget ww : w.children()) {
-                if (!(ww instanceof Inventory)) continue;
-                Coord inventorySize = ((Inventory) ww).isz;
-                for (int i = 0; i < inventorySize.x; i++) {
-                    for (int j = 0; j < inventorySize.y; j++) {
-                        Coord indexCoord = new Coord(i, j);
-                        Coord calculatedCoord = indexCoord.mul(sqsz).add(1, 1);
-                        for (Map.Entry<GItem, WItem> entry : ((Inventory) ww).wmap.entrySet()) {
-                            if (entry.getValue().c.equals(calculatedCoord)) {
-                                String resName = entry.getKey().res.get().name;
-                                ItemInfo.Contents.Content content = getContent(entry.getKey());
-                                if (resName.equals("gfx/invobjs/small/waterskin") && shouldAddToContainers(content, 3.0F)) {
-                                    containers.put(entry.getValue(), indexCoord);
-                                } else if (resName.equals("gfx/invobjs/waterflask") && shouldAddToContainers(content, 2.0F)) {
-                                    containers.put(entry.getValue(), indexCoord);
-                                } else if (resName.equals("gfx/invobjs/small/glassjug") && shouldAddToContainers(content, 5.0F)) {
-                                    containers.put(entry.getValue(), indexCoord);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        return containers;
-    }
-
-    public Inventory returnBelt() {
+    private Inventory returnBelt() {
         Inventory belt = null;
         for (Widget w = gui.lchild; w != null; w = w.prev) {
             if (!(w instanceof GItem.ContentsWindow) || !((GItem.ContentsWindow) w).myOwnEquipory) continue;
@@ -118,25 +74,19 @@ public class RefillWaterContainers implements Runnable {
         return belt;
     }
 
-    public Map<WItem, Coord> getInventoryContainers() {
-        Inventory playerInventory = gui.maininv;
-        Coord inventorySize = playerInventory.isz;
+    private Map<WItem, Coord> getInventoryContainers(Inventory inventory) {
+        Coord inventorySize = inventory.isz;
         Coord sqsz = Inventory.sqsz;
         Map<WItem, Coord> containers = new HashMap<>();
         for (int i = 0; i < inventorySize.x; i++) {
             for (int j = 0; j < inventorySize.y; j++) {
                 Coord indexCoord = new Coord(i, j);
                 Coord calculatedCoord = indexCoord.mul(sqsz).add(1, 1);
-
-                for (Map.Entry<GItem, WItem> entry : playerInventory.wmap.entrySet()) {
+                for (Map.Entry<GItem, WItem> entry : inventory.wmap.entrySet()) {
                     if (entry.getValue().c.equals(calculatedCoord)) {
                         String resName = entry.getKey().res.get().name;
                         ItemInfo.Contents.Content content = getContent(entry.getKey());
-                        if (resName.equals("gfx/invobjs/waterskin") && shouldAddToContainers(content, 3.0F)) {
-                            containers.put(entry.getValue(), indexCoord);
-                        } else if (resName.equals("gfx/invobjs/waterflask") && shouldAddToContainers(content, 2.0F)) {
-                            containers.put(entry.getValue(), indexCoord);
-                        } else if (resName.equals("gfx/invobjs/glassjug") && shouldAddToContainers(content, 5.0F)) {
+                        if(WATER_CONTAINERS.containsKey(resName) && shouldAddToContainers(content, WATER_CONTAINERS.get(resName))){
                             containers.put(entry.getValue(), indexCoord);
                         }
                     }
@@ -145,7 +95,21 @@ public class RefillWaterContainers implements Runnable {
         }
         return containers;
     }
-
+    private void refillInventoryWaterContainers(Inventory inventory){
+        Map<WItem, Coord> inventoryItems = getInventoryContainers(inventory);
+        for (Map.Entry<WItem, Coord> item : inventoryItems.entrySet()) {
+            try {
+                item.getKey().item.wdgmsg("take", Coord.z);
+                Thread.sleep(5);
+                gui.map.wdgmsg("itemact", Coord.z, gui.map.player().rc.floor(posres), 0);
+                Thread.sleep(30);
+                inventory.wdgmsg("drop", item.getValue());
+                Thread.sleep(5);
+            } catch (InterruptedException ignored) {
+                return;
+            }
+        }
+    }
     private ItemInfo.Contents.Content getContent(GItem item) {
         ItemInfo.Contents.Content content = null;
         for (ItemInfo info : item.info()) {
