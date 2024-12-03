@@ -11,6 +11,17 @@ public class RefillWaterContainers implements Runnable {
     private static final Coord2d posres = Coord2d.of(0x1.0p-10, 0x1.0p-10).mul(11, 11);
     private GameUI gui;
 
+    private final Map<String, Float> WATER_CONTAINERS = Map.ofEntries(
+        // Generic
+        Map.entry("gfx/invobjs/waterflask",      2.0F),
+        Map.entry("gfx/invobjs/waterskin",       3.0F),
+        Map.entry("gfx/invobjs/glassjug",        5.0F),
+        // Belt
+        Map.entry("gfx/invobjs/small/waterskin", 3.0F),
+        Map.entry("gfx/invobjs/small/glassjug",  5.0F)
+
+    );
+
     public RefillWaterContainers(GameUI gui) {
         this.gui = gui;
     }
@@ -101,13 +112,7 @@ public class RefillWaterContainers implements Runnable {
                         Coord calculatedCoord = indexCoord.mul(sqsz).add(1, 1);
                         for (Map.Entry<GItem, WItem> entry : ((Inventory) ww).wmap.entrySet()) {
                             if (entry.getValue().c.equals(calculatedCoord)) {
-                                String resName = entry.getKey().res.get().name;
-                                ItemInfo.Contents.Content content = getContent(entry.getKey());
-                                if (resName.equals("gfx/invobjs/small/waterskin") && shouldAddToContainers(content, 3.0F)) {
-                                    containers.put(entry.getValue(), indexCoord);
-                                } else if (resName.equals("gfx/invobjs/waterflask") && shouldAddToContainers(content, 2.0F)) {
-                                    containers.put(entry.getValue(), indexCoord);
-                                } else if (resName.equals("gfx/invobjs/small/glassjug") && shouldAddToContainers(content, 5.0F)) {
+                                if(shouldAddToContainers(entry.getValue())){
                                     containers.put(entry.getValue(), indexCoord);
                                 }
                             }
@@ -144,13 +149,7 @@ public class RefillWaterContainers implements Runnable {
 
                 for (Map.Entry<GItem, WItem> entry : playerInventory.wmap.entrySet()) {
                     if (entry.getValue().c.equals(calculatedCoord)) {
-                        String resName = entry.getKey().res.get().name;
-                        ItemInfo.Contents.Content content = getContent(entry.getKey());
-                        if (resName.equals("gfx/invobjs/waterskin") && shouldAddToContainers(content, 3.0F)) {
-                            containers.put(entry.getValue(), indexCoord);
-                        } else if (resName.equals("gfx/invobjs/waterflask") && shouldAddToContainers(content, 2.0F)) {
-                            containers.put(entry.getValue(), indexCoord);
-                        } else if (resName.equals("gfx/invobjs/glassjug") && shouldAddToContainers(content, 5.0F)) {
+                        if(shouldAddToContainers(entry.getValue())){
                             containers.put(entry.getValue(), indexCoord);
                         }
                     }
@@ -165,20 +164,12 @@ public class RefillWaterContainers implements Runnable {
         WItem rightPouch = gui.getequipory().slots[20];
         Map<WItem, Integer> containers = new HashMap<>();
         if (leftPouch != null) {
-            String resName = leftPouch.item.res.get().name;
-            ItemInfo.Contents.Content content = getContent(leftPouch.item);
-            if ((resName.equals("gfx/invobjs/small/waterskin") && shouldAddToContainers(content, 3.0F))
-                    || (resName.equals("gfx/invobjs/waterflask") && shouldAddToContainers(content, 2.0F))
-                    || (resName.equals("gfx/invobjs/small/glassjug") && shouldAddToContainers(content, 5.0F))) {
+            if(shouldAddToContainers(leftPouch)){
                 containers.put(leftPouch, 19);
             }
         }
         if (rightPouch != null) {
-            String resName = rightPouch.item.res.get().name;
-            ItemInfo.Contents.Content content = getContent(rightPouch.item);
-            if ((resName.equals("gfx/invobjs/small/waterskin") && shouldAddToContainers(content, 3.0F))
-                    || (resName.equals("gfx/invobjs/waterflask") && shouldAddToContainers(content, 2.0F))
-                    || (resName.equals("gfx/invobjs/small/glassjug") && shouldAddToContainers(content, 5.0F))) {
+            if(shouldAddToContainers(rightPouch)){
                 containers.put(rightPouch, 20);
             }
         }
@@ -195,7 +186,12 @@ public class RefillWaterContainers implements Runnable {
         return content;
     }
 
-    private boolean shouldAddToContainers(ItemInfo.Contents.Content content, float contentCount) {
-        return content == null || (content.count != contentCount && Objects.equals(content.name, "Water"));
+    private boolean shouldAddToContainers(WItem wItem) {
+        String resName = wItem.item.res.get().name;
+        ItemInfo.Contents.Content content = getContent(wItem.item);
+        if(WATER_CONTAINERS.containsKey(resName) == false)
+            return false;
+        
+        return content == null || (content.count != WATER_CONTAINERS.get(resName) && Objects.equals(content.name, "Water"));
     }
 }
